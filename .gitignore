@@ -1,0 +1,32 @@
+# Rust
+engine/target/
+engine/Cargo.lock
+
+# Go
+client/cli/lota
+client/cli/lota-*
+client/cli/vendor/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+server/**/__pycache__/
+.mypy_cache/
+.ruff_cache/
+
+# Packages / bundles (generated)
+packages/
+*.lota/
+
+# Secrets / keys
+*.pem
+*.key
+*.p12
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

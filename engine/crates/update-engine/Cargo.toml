@@ -1,0 +1,22 @@
+[package]
+name = "update-engine"
+description = "Core OTA update orchestration engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+tracing.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+slot-manager = { path = "../slot-manager" }
+delta-apply  = { path = "../delta-apply" }
+omaha-client = { path = "../omaha-client" }
+fwupd-client = { path = "../fwupd-client" }

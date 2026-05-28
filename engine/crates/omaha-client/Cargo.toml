@@ -1,0 +1,16 @@
+[package]
+name = "omaha-client"
+description = "Omaha v3 protocol client for update server communication"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+quick-xml.workspace = true

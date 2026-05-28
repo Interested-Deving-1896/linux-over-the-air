@@ -1,0 +1,178 @@
+# system.toml — linux-over-the-air system configuration
+#
+# This file describes the update target: slot layout, bootloader type,
+# filesystem type, and update policy. It is read by the update engine
+# daemon at startup and by the CLI tools.
+#
+# All values shown are defaults. Override in /etc/lota/system.toml
+# or pass --config <path> to any lota command.
+
+[system]
+# Human-readable name for this system (used in update server queries)
+name = ""
+
+# Architecture — auto-detected if empty
+# Valid: amd64, arm64, armhf, riscv64, s390x, armel, ppc64el, mips64el, loong64, i386
+arch = ""
+
+# Distro family — auto-detected from /etc/os-release if empty
+# Valid: debian, devuan, ubuntu, fedora, alpine, arch, gentoo, generic
+distro = ""
+
+# Filesystem type of the root partition
+# Valid: ext4, btrfs, xfs, f2fs, squashfs, erofs, ubifs, raw
+filesystem = "ext4"
+
+# ── Slot configuration (A/B updates) ─────────────────────────────────────────
+[slots]
+# Slot layout: ab (A/B rootfs), single (no A/B, in-place update), recovery
+layout = "ab"
+
+[slots.a]
+device = ""          # e.g. /dev/sda2 — auto-detected if empty
+mountpoint = "/"
+filesystem = ""      # inherits [system].filesystem if empty
+
+[slots.b]
+device = ""          # e.g. /dev/sda3
+mountpoint = "/mnt/lota-slot-b"
+filesystem = ""
+
+# ── Bootloader ────────────────────────────────────────────────────────────────
+[bootloader]
+# Valid: grub2, systemd-boot, u-boot, barebox, efi-stub, custom
+type = "grub2"
+
+# Boot confirmation timeout in seconds
+# If the system does not confirm a good boot within this window,
+# the bootloader reverts to the previous slot on next boot.
+confirm_timeout_secs = 60
+
+# Path to the boot confirmation tool
+# Defaults to the built-in confirm-boot.sh
+confirm_command = ""
+
+# ── Update channels ───────────────────────────────────────────────────────────
+[channels]
+# Active channel — must match a channel defined in channels.toml
+active = "stable"
+
+# Update server URL (Omaha protocol)
+server_url = "https://update.example.com/service/update2"
+
+# Fallback to LVFS for firmware updates
+lvfs_enabled = true
+
+# ── Firmware update policy ────────────────────────────────────────────────────
+[firmware]
+# When to apply fwupd firmware updates relative to OS updates
+# Valid: before_os, after_os, independent, disabled
+policy = "before_os"
+
+# Require firmware updates to succeed before proceeding with OS update
+firmware_required = false
+
+# fwupd D-Bus service name
+dbus_service = "org.freedesktop.fwupd"
+
+# ── DLC (Downloadable Content) ────────────────────────────────────────────────
+[dlc]
+enabled = true
+install_dir = "/var/lib/lota/dlc"
+manifest_url = ""    # inherits [channels].server_url if empty
+
+# ── Incus runtime ─────────────────────────────────────────────────────────────
+[incus]
+# Use Incus for isolated update environments (replaces Docker/Podman)
+enabled = false
+socket = "/var/lib/incus/unix.socket"
+# Instance type for update staging: container, vm
+instance_type = "container"
+# Base image for update staging instances
+base_image = "images:debian/trixie"
+
+# ── Hooks ─────────────────────────────────────────────────────────────────────
+[hooks]
+# Directory containing pre/post update hook scripts
+hook_dir = "/etc/lota/hooks.d"
+# Maximum time for any single hook to run
+timeout_secs = 300
+
+# ── Android / AOSP support ────────────────────────────────────────────────────
+[android]
+# Enable Android OTA support. When true, the engine activates Android-specific
+# slot management (bootctl HAL), payload.bin handling, and AVB verification.
+enabled = false
+
+# AVB (Android Verified Boot) mode
+# signed   — verify and re-sign with avb_key after slot writes
+# unlocked — produce VERIFICATION_DISABLED vbmeta (no key required)
+avb_mode = "unlocked"
+
+# Path to AVB signing key (PEM). Required when avb_mode = "signed".
+avb_key = ""
+
+# AVB signing algorithm
+# Valid: SHA256_RSA2048, SHA256_RSA4096, SHA256_RSA8192, SHA512_RSA4096
+avb_algorithm = "SHA256_RSA4096"
+
+# How to reach the bootctl HAL
+# local  — run bootctl directly (on-device)
+# adb    — run via `adb -s <serial> shell bootctl`
+# bcb    — manipulate BCB directly (no bootctl, host-side flashing)
+bootctl_transport = "local"
+
+# ADB serial number (required when bootctl_transport = "adb")
+adb_serial = ""
+
+# BCB misc partition device (required when bootctl_transport = "bcb")
+bcb_device = "/dev/block/by-name/misc"
+
+# Virtual A/B: track snapshot merge state before slot switches
+virtual_ab = false
+
+# Payload format for Android OTA bundles
+# crau     — native Android payload.bin (CrAU format, produced by delta_generator)
+# lota     — lota's own bundle format (for non-AOSP Android targets)
+payload_format = "crau"
+
+# Transport modes to support (comma-separated or "all")
+# Valid: fastboot, adb, network, all
+transport = "all"
+
+# ── Waydroid (Android container on Linux) ─────────────────────────────────────
+[android.waydroid]
+# Enable Waydroid container image OTA management
+enabled = false
+
+# Waydroid image directory
+images_dir = "/var/lib/waydroid/images"
+
+# Image channel: vanilla (AOSP) or gapps (with Google Play Services)
+channel = "vanilla"
+
+# Use Incus to manage the Waydroid LXC container (instead of native LXC)
+use_incus = false
+
+# ── Halium (Android hardware adaptation on Linux) ─────────────────────────────
+[android.halium]
+# Enable Halium hardware adaptation layer OTA management
+enabled = false
+
+# Halium distro variant
+# Valid: droidian, ubports, pmos (postmarketOS)
+distro = "droidian"
+
+# Block devices for each Halium layer (auto-detected from by-partlabel if empty)
+boot_device   = ""
+system_device = ""
+vendor_device = ""
+rootfs_device = ""
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+[logging]
+# Valid: trace, debug, info, warn, error
+level = "info"
+# Log destination: journal, file, stderr
+destination = "journal"
+log_file = "/var/log/lota/update.log"

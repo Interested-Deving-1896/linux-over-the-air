@@ -1,0 +1,15 @@
+[package]
+name = "delta-apply"
+description = "Delta payload application (bsdiff/bspatch + zstd decompression)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+sha2.workspace = true
+hex.workspace = true
+bsdiff.workspace = true

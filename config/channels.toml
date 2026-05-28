@@ -1,0 +1,36 @@
+# channels.toml — update channel definitions
+#
+# Channels map to update server endpoints and control rollout policy.
+# The active channel is set in system.toml [channels].active.
+
+[[channel]]
+name = "stable"
+description = "Production releases — fully tested, conservative rollout"
+server_url = ""          # inherits system.toml [channels].server_url
+rollout_percent = 100
+allow_downgrade = false
+delta_updates = true
+
+[[channel]]
+name = "beta"
+description = "Pre-release builds — tested but may have rough edges"
+server_url = ""
+rollout_percent = 100
+allow_downgrade = false
+delta_updates = true
+
+[[channel]]
+name = "dev"
+description = "Development builds — may be unstable"
+server_url = ""
+rollout_percent = 100
+allow_downgrade = true
+delta_updates = false
+
+[[channel]]
+name = "lts"
+description = "Long-term support releases — security fixes only"
+server_url = ""
+rollout_percent = 100
+allow_downgrade = false
+delta_updates = true
