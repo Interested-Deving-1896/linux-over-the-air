@@ -1,0 +1,77 @@
+name: Upstream PRs from OSP + OOC
+
+# Collects open PRs from mirror orgs (OSP, OOC) and opens matching PRs in
+# Interested-Deving-1896 (source of truth) with auto-merge enabled.
+#
+# Schedule: runs at :30 each hour, between the two mirror syncs (:00 and :15),
+# so any PR merged upstream will be reflected in mirrors within the same hour.
+
+on:
+  schedule:
+    - cron: "33 */6 * * *"  # Every 6h — matches mirror-to-osp (*/6) cadence
+  workflow_dispatch:
+    inputs:
+      repo_filter:
+        description: "Repo name substring filter (blank = all)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run — detect PRs without opening upstream PRs"
+        type: boolean
+        required: false
+        default: false
+      mirror_orgs:
+        description: "Space-separated mirror orgs to scan (blank = both OSP and OOC)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# ── Rate limits ──────────────────────────────────────────────────────────────
+# GitHub REST API (SYNC_TOKEN): 5 000 req/hr primary limit.
+#   upstream-prs.sh retries HTTP 403/429 up to 3 times with reset-aware sleep.
+#   Runs hourly at :30 — offset from other hourly workflows to spread usage.
+
+concurrency:
+  group: upstream-prs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  upstream-prs:
+    name: Upstream PRs → Interested-Deving-1896
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+
+      - name: Quota pre-flight
+        id: quota
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          MIN_QUOTA: "1000"
+        run: |
+          remaining=$(curl -sf \
+            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/rate_limit \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['resources']['core']['remaining'])")
+          echo "remaining=${remaining}" >> "$GITHUB_OUTPUT"
+          if [[ "${remaining}" -lt "${MIN_QUOTA}" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Quota too low (${remaining} < ${MIN_QUOTA}) — skipping. quota-monitor will retry."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upstream open PRs from OSP and OOC
+        if: steps.quota.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          UPSTREAM_OWNER: Interested-Deving-1896
+          MIRROR_ORGS: "OpenOS-Project-OSP OpenOS-Project-Ecosystem-OOC"
+          BUDGET_MINUTES: "25"
+        run: bash scripts/upstream-prs.sh
