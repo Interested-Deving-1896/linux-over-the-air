@@ -1,29 +1,12 @@
 name: Notification Poller
 
-# Polls the GitHub notifications API every 15 minutes for unread CI failure
-# notifications. When any are found, triggers resolve-failures.yml immediately
-# rather than waiting for its daily 07:30 UTC schedule.
-#
-# This workflow itself is intentionally minimal — no checkout, no scripts,
-# just a single API call. All the actual fix logic lives in resolve-failures.
-#
-# Concurrency: if a resolve-failures run is already in progress (cancel-in-
-# progress: false), the triggered run will queue behind it automatically.
-
 on:
   schedule:
-    - cron: '*/30 * * * *'   # Every 30 minutes — halved to reduce quota pressure
+    - cron: '*/30 * * * *'
   workflow_dispatch: {}
 
 permissions:
-  actions: write   # Needed to trigger workflow_dispatch on resolve-failures.yml
-
-# ── Rate limits ──────────────────────────────────────────────────────────────
-# One GitHub notifications API call every 15 minutes = 4 req/hr, well within
-#   the 5 000 req/hr primary limit.
-# If SYNC_TOKEN is temporarily rate-limited, curl -sf exits non-zero, count
-#   defaults to 0, and no resolver trigger is sent. The next poll retries
-#   automatically 15 minutes later.
+  actions: write
 
 concurrency:
   group: notify-poller-${{ github.ref }}
@@ -41,7 +24,7 @@ jobs:
           MIN_QUOTA: "500"
         run: |
           remaining=$(curl -sf \
-            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Authorization: token ${{ secrets.SYNC_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/rate_limit \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['resources']['core']['remaining'])")
@@ -55,7 +38,7 @@ jobs:
 
       - name: Restore ETag cache
         if: steps.quota.outputs.skip == 'false'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/notify-poller
           key: notify-poller-etag-v1
@@ -67,10 +50,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
-          # ETag caching: a 304 Not Modified response costs 0 against the
-          # rate limit. We persist the ETag from the previous poll in the
-          # Actions cache and send If-None-Match on subsequent requests.
-          # On 304, notifications haven't changed — skip the resolver trigger.
           CACHE_DIR="${HOME}/.cache/notify-poller"
           ETAG_FILE="${CACHE_DIR}/notifications.etag"
           mkdir -p "$CACHE_DIR"
@@ -81,9 +60,8 @@ jobs:
             [[ -n "$stored_etag" ]] && ETAG_HEADER="-H \"If-None-Match: ${stored_etag}\""
           fi
 
-          # Capture both headers and body; -D - writes headers to stdout
           response=$(eval curl -s -w "\n%{http_code}" \
-            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Authorization: token ${{ secrets.SYNC_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             -D "${CACHE_DIR}/response-headers.txt" \
             ${ETAG_HEADER} \
@@ -92,21 +70,16 @@ jobs:
           http_code=$(printf '%s' "$response" | tail -1)
           body=$(printf '%s' "$response" | sed '$d')
 
-          # 304 Not Modified — no new notifications since last poll, 0 rate cost
           if [[ "$http_code" == "304" ]]; then
             echo "304 Not Modified — notifications unchanged since last poll (0 rate cost)"
             printf 'ci_failure_count=0\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Persist the new ETag for the next poll
           new_etag=$(grep -i '^etag:' "${CACHE_DIR}/response-headers.txt" 2>/dev/null \
             | tr -d '\r' | awk '{print $2}')
           [[ -n "$new_etag" ]] && printf '%s' "$new_etag" > "$ETAG_FILE"
 
-          # grep -c outputs a bare integer with a trailing newline.
-          # Trim it before writing to GITHUB_OUTPUT — a trailing newline
-          # causes "Invalid format" and fails the step.
           raw=$(printf '%s' "$body" | grep -c '"ci_activity"') || raw=0
           count=$(printf '%s' "$raw" | tr -d '[:space:]')
 
@@ -115,7 +88,7 @@ jobs:
 
       - name: Save ETag cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/.cache/notify-poller
           key: notify-poller-etag-v1
@@ -128,7 +101,7 @@ jobs:
           echo "Found ${{ steps.check.outputs.ci_failure_count }} CI notification(s) — triggering resolver..."
           curl -sf \
             -X POST \
-            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Authorization: token ${{ secrets.SYNC_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/resolve-failures.yml/dispatches" \
             -d '{"ref":"main"}' \
@@ -140,11 +113,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
-          # GitHub PAT expiry is in the github-authentication-token-expiration
-          # response header. A missing header means the token has no expiry set
-          # (fine-grained PATs always have one; classic PATs may not).
           expiry=$(curl -sI \
-            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Authorization: token ${{ secrets.SYNC_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/rate_limit" \
             | grep -i "github-authentication-token-expiration:" \
@@ -166,10 +136,9 @@ jobs:
             exit 1
           elif [[ "$days_left" -le 2 ]]; then
             echo "::warning::SYNC_TOKEN expires in ${days_left} day(s). Rotate before it expires."
-            # Trigger token-health workflow for a full report
             curl -sf \
               -X POST \
-              -H "Authorization: token ${GH_TOKEN}" \
+              -H "Authorization: token ${{ secrets.SYNC_TOKEN }}" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/token-health.yml/dispatches" \
               -d '{"ref":"main"}' \
