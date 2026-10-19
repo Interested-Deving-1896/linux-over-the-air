@@ -36,7 +36,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lota-engine-${{ matrix.target }}
           path: engine/target/${{ matrix.target }}/release/lota-engine
@@ -72,7 +72,7 @@ jobs:
         run: go build -o lota-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/lota/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lota-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: client/cli/lota-${{ matrix.goos }}-${{ matrix.goarch }}
